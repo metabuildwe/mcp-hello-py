@@ -104,6 +104,65 @@ def say_hello_multiple(names: list[str]) -> str:
     return "\n".join(greetings)
 
 
+@mcp.tool()
+def say_time_greeting(name: str, tz: str = "Asia/Seoul") -> str:
+    """
+    현재 시간대(아침/오후/저녁)에 따라 인사말을 반환합니다.
+    
+    Args:
+        name: 인사할 대상의 이름
+        tz: IANA 타임존 문자열 (기본값: "Asia/Seoul")
+    
+    Returns:
+        시간대에 따른 인사말 문자열
+    
+    Examples:
+        >>> say_time_greeting("김철수")
+        '좋은 아침입니다, 김철수님!'  # (시간대에 따라 달라질 수 있음)
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    try:
+        now = datetime.now(ZoneInfo(tz))
+    except Exception:
+        # 타임존이 잘못 들어오면 기본값으로 폴백
+        now = datetime.now(ZoneInfo("Asia/Seoul"))
+
+    hour = now.hour
+
+    if 5 <= hour < 12:
+        prefix = "좋은 아침입니다"
+    elif 12 <= hour < 18:
+        prefix = "안녕하세요"
+    else:
+        prefix = "좋은 저녁입니다"
+
+    if not name or name.strip() == "":
+        return f"{prefix}!"
+    
+    return f"{prefix}, {name}님!"
+
+
+@mcp.tool()
+def health_check() -> dict[str, str]:
+    """
+    서버 헬스 체크 정보를 반환합니다.
+    
+    Returns:
+        상태 및 버전 정보를 담은 dict
+    
+    Examples:
+        >>> health_check()
+        {'status': 'ok', 'service': 'mcp-hello', 'version': '1.0.1'}
+    """
+    return {
+        "status": "ok",
+        "service": APP_NAME,
+        "version": APP_VERSION,
+    }
+
+
 # ============================================================================
 # Resources (리소스)
 # ============================================================================
