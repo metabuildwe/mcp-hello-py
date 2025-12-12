@@ -2,10 +2,10 @@
 
 간단한 Hello MCP 서버 - 이름을 입력받아 한국어로 인사합니다!
 
-## 구조
+######### 구조
 
 ```
-mcp-hello-py/
+mcp-hello-py//////
 ├── src/
 │   ├── __init__.py       # 패키지 초기화
 │   └── server.py         # MCP 서버
