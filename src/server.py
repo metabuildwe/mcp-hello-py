@@ -28,6 +28,7 @@ Simple Hello MCP Server
 """
 
 import os
+import requests
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -47,6 +48,7 @@ mcp = FastMCP(
     ),
 )
 
+API_KEY = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0"
 
 # ============================================================================
 # Tools (도구)
@@ -103,6 +105,29 @@ def say_hello_multiple(names: list[str]) -> str:
     
     return "\n".join(greetings)
 
+@mcp.tool()
+def tell_weather(region: str) -> str:
+    url = "http://apis.data.go.kr/1360000/MidFcstInfoService/getMidLandFcst?" \
+    "serviceKey=0b13b8c7adfa9aa11719a3c95160bcadb3af93677c9ff77dd7d3edfa87772bca&numOfRows=10&pageNo=1&regId=11B00000&tmFc=201310171800"
+    response = requests.get(url)
+    if response.status_code != 200:
+        return f"날씨 정보를 가져오지 못했습니다."
+    data = response.json()
+    """
+    region의 금일 날씨를 알려줍니다.
+
+    Args:
+        region: 날씨를 알려줄 지역 (예: "서울", "부산", "인천")
+    Returns:
+        날씨 요소 별로 줄바꿈으로 구분된 문자열
+    Examples:
+        >>> tell_weather("서울")
+        '20251210의 서울의 날씨는\\n날씨: 흐림\\n기온: 영상 12도\\n입니다.'
+    """
+    if not region:
+        return ""
+    
+    return f"기상전망은 다음과 같습니다.\\n{data['wfSv']}"
 
 # ============================================================================
 # Resources (리소스)
