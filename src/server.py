@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
 """
-Hybrid Data & Text Utility MCP Server
+Financial & Life Calculation MCP Server
 
-이 모듈은 텍스트 요약, 유사도 분석, 로그 계산과 같은 다양한 유틸리티 기능을 제공합니다.
+이 모듈은 연봉 계산, 단순 이자 계산, 대출 상환액 계산과 같은 실생활 재무 계산 기능을 제공합니다.
 
 주요 기능:
-    - 텍스트 파일 내용 요약
-    - 슬래시 구분 단어의 유사도 분석
-    - 로그 값 계산
+    - 월급 및 기간 기반 연봉 및 월 실수령액 계산 (간소화된 모델)
+    - 초기 원금 및 기간 기반 단순 이자 계산
+    - 대출 상환액 계산
     - MCP 프로토콜: Tools, Resources, Prompts 지원
     - Streamable HTTP 전송: Cloud Run 등 서버리스 환경 지원
 
-작성자: MCP Hybrid Team
-버전: 4.0.0
+작성자: MCP Finance Team
+버전: 5.1.0
 라이선스: MIT
 """
 ####################################################################################
 import os
-import math # 로그 계산을 위해 math 모듈 추가
-from typing import Literal
+import math 
+from typing import Dict, Literal, Union
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 # 앱 버전과 이름을 정의합니다.
-APP_NAME = "mcp-hybrid-utility"
-APP_VERSION = "4.0.0"
+APP_NAME = "mcp-finance-calc"
+APP_VERSION = "5.1.0"
 
 
 # ============================================================================
@@ -34,7 +34,7 @@ APP_VERSION = "4.0.0"
 
 mcp = FastMCP(
     name=APP_NAME,
-    instructions="텍스트 요약, 유사도 분석 및 수학적 로그 계산을 수행하는 하이브리드 유틸리티 도구를 제공합니다.",
+    instructions="월급 기반 연봉 계산, 단순 이자 및 대출 상환액 계산 도구를 제공합니다.",
     stateless_http=True,
     json_response=True,
     host="0.0.0.0",
@@ -45,157 +45,159 @@ mcp = FastMCP(
 
 
 # ============================================================================
-# Tools (도구) - 요청된 3가지 신규 툴
+# Tools (도구) - 사용자 요청 반영
 # ============================================================================
 
 @mcp.tool()
-def summarize_text_file(file_content: str, summary_length: Literal["short", "medium", "long"] = "medium") -> str:
+def calculate_annual_salary(monthly_salary: float, period_months: int = 12) -> Dict[str, float]:
     """
-    텍스트 파일의 전체 내용을 받아 지정된 길이로 요약하여 반환합니다.
+    월급과 지급 기간(개월)을 입력받아 연봉 및 예상 월 실수령액을 계산합니다.
     
-    주의: 이 함수는 실제 AI 모델 없이 단순한 휴리스틱 (첫 문장 추출 등)을 사용하며,
-    실제 AI 서비스는 아닙니다.
+    주의: 이 계산은 간소화된 모델이며, 실제 국가별/개인별 세금 및 공제액과 차이가 있을 수 있습니다.
     
     Args:
-        file_content: 요약할 텍스트 파일의 전체 내용 문자열
-        summary_length: 원하는 요약 길이 ("short": 1-2문장, "medium": 3-5문장, "long": 6-10문장)
+        monthly_salary: 세전 월급
+        period_months: 월급을 받는 총 기간 (기본값: 12개월)
     
     Returns:
-        요약된 텍스트 문자열
-    
-    Examples:
-        >>> summarize_text_file("첫 문장. 둘째 문장. 셋째 문장.", "short")
-        '첫 문장. 둘째 문장.'
-    """
-    sentences = [s.strip() for s in file_content.split('.') if s.strip()]
-    
-    if summary_length == "short":
-        num_sentences = min(2, len(sentences))
-    elif summary_length == "medium":
-        num_sentences = min(5, len(sentences))
-    else: # long
-        num_sentences = min(10, len(sentences))
-        
-    summary = ". ".join(sentences[:num_sentences])
-    if summary:
-        return summary + "."
-    return "요약할 내용이 충분하지 않습니다."
-
-
-@mcp.tool()
-def calculate_slash_similarity(slash_input: str) -> float:
-    """
-    슬래시(/)로 구분된 두 단어의 유사도를 Jaccard 유사도를 사용하여 계산합니다.
-    
-    Args:
-        slash_input: '단어1/단어2' 형태로 슬래시로 구분된 문자열
-    
-    Returns:
-        두 단어의 유사도 점수 (float, 0.0 ~ 1.0)
-    
-    Examples:
-        >>> calculate_slash_similarity("사과/오렌지")
-        0.0  # (공통 단어가 없음)
-        >>> calculate_slash_similarity("데이터분석/데이터처리")
-        0.5  # (데이터라는 공통 단어 기반)
-    """
-    if '/' not in slash_input:
-        raise ValueError("입력은 '단어1/단어2' 형태로 슬래시(/)를 포함해야 합니다.")
-        
-    parts = slash_input.split('/')
-    if len(parts) != 2:
-        # 슬래시가 여러 개인 경우 처리
-        raise ValueError("두 단어만 슬래시로 구분해야 합니다.")
-        
-    word1 = parts[0].strip().lower()
-    word2 = parts[1].strip().lower()
-    
-    # 각 단어를 구성하는 문자로 집합 생성 (문자 기반 유사도)
-    set1 = set(word1)
-    set2 = set(word2)
-    
-    if not set1 and not set2:
-        return 1.0
-    if not set1 or not set2:
-        return 0.0
-        
-    intersection = len(set1.intersection(set2))
-    union = len(set1.union(set2))
-    
-    return intersection / union
-
-
-@mcp.tool()
-def calculate_logarithm(number: float, base: Literal[2, 10, 'e'] = 'e') -> float:
-    """
-    입력된 숫자의 로그 값(Logarithm)을 지정된 밑(Base)에 대해 계산하여 반환합니다.
-    
-    Args:
-        number: 로그를 계산할 숫자 (양수여야 함)
-        base: 로그의 밑. 2 (이진 로그), 10 (상용 로그), 'e' (자연 로그) 중 하나
-    
-    Returns:
-        로그 계산 결과 (float)
+        계산 결과를 담은 딕셔너리
         
     Examples:
-        >>> calculate_logarithm(100, 10)
-        2.0
-        >>> calculate_logarithm(2.71828, 'e')
-        1.0
+        >>> calculate_annual_salary(3000000, 12)
+        {'annual_pretax': 36000000.0, 'monthly_deduction': 300000.0, 'monthly_takehome': 2700000.0}
     """
-    if number <= 0:
-        raise ValueError("로그를 계산할 숫자는 양수여야 합니다.")
+    if monthly_salary <= 0 or period_months <= 0:
+        raise ValueError("월급과 기간은 0보다 커야 합니다.")
         
-    if base == 2:
-        return math.log2(number)
-    elif base == 10:
-        return math.log10(number)
-    elif base == 'e':
-        return math.log(number) # math.log는 자연 로그(ln)를 계산
+    # 연봉 계산
+    annual_pretax = monthly_salary * period_months
+    
+    # 간이 세액표 등을 고려한 대략적인 공제율 (연봉에 따라 조정)
+    if annual_pretax < 40000000:
+        deduction_rate = 0.10
+    elif annual_pretax < 70000000:
+        deduction_rate = 0.15
     else:
-        raise ValueError("지원하는 밑(base)은 2, 10, 'e' 중 하나여야 합니다.")
+        deduction_rate = 0.20
+        
+    # 월 공제액 (월급 기준)
+    monthly_deduction = monthly_salary * (deduction_rate * 0.9) # 연봉 구간에 따른 세전 월급의 약 90%에 공제율 적용 가정
+    monthly_takehome = monthly_salary - monthly_deduction
+    
+    # 소수점 두 자리까지 반올림
+    return {
+        "annual_pretax": round(annual_pretax, 2),
+        "monthly_deduction": round(monthly_deduction, 2),
+        "monthly_takehome": round(monthly_takehome, 2),
+    }
+
+
+@mcp.tool()
+def calculate_simple_interest(principal: float, annual_rate: float, years: float) -> Dict[str, float]:
+    """
+    원금, 연 이자율, 기간을 기반으로 **단리(Simple Interest)**를 계산하여 총 이익을 반환합니다.
+    
+    Args:
+        principal: 초기 원금
+        annual_rate: 연 이자율 (0.05 = 5%)
+        years: 저축 기간 (년)
+    
+    Returns:
+        최종 원리금 합계(total_value)와 총 이자(total_interest)를 담은 딕셔너리
+        
+    Examples:
+        >>> calculate_simple_interest(1000000, 0.05, 1)
+        {'total_value': 1050000.0, 'total_interest': 50000.0}
+    """
+    if principal <= 0 or years < 0:
+        raise ValueError("원금은 양수여야 하며, 기간은 음수일 수 없습니다.")
+        
+    # 공식: I = P * r * t (단순 이자 계산)
+    # P: 원금, r: 연 이자율, t: 기간(년)
+    
+    total_interest = principal * annual_rate * years
+    total_value = principal + total_interest
+    
+    return {
+        "total_value": round(total_value, 2),
+        "total_interest": round(total_interest, 2),
+    }
+
+
+@mcp.tool()
+def calculate_loan_repayment(principal: float, annual_rate: float, months: int) -> Dict[str, float]:
+    """
+    원금, 연 이자율, 대출 기간(월)을 기반으로 **원리금 균등 상환 방식**의 월 상환액을 계산합니다.
+    
+    Args:
+        principal: 대출 원금
+        annual_rate: 연 이자율 (0.05 = 5%)
+        months: 총 상환 기간 (월)
+    
+    Returns:
+        월 상환액(monthly_payment)과 총 이자(total_interest)를 담은 딕셔너리
+        
+    Examples:
+        >>> calculate_loan_repayment(100000000, 0.04, 120) # 1억, 4%, 10년
+        {'monthly_payment': 1012457.73, 'total_interest': 21495927.9} # 예시 값은 조정될 수 있음
+    """
+    if principal <= 0 or months <= 0:
+        raise ValueError("원금과 기간은 0보다 커야 합니다.")
+        
+    if annual_rate == 0:
+        monthly_payment = principal / months
+        total_interest = 0
+    else:
+        # 월 이자율
+        monthly_rate = annual_rate / 12
+        
+        # 월 상환액 공식 (PMT): P * [ i(1+i)^n / ((1+i)^n - 1) ]
+        numerator = monthly_rate * (1 + monthly_rate) ** months
+        denominator = (1 + monthly_rate) ** months - 1
+        monthly_payment = principal * (numerator / denominator)
+        
+        # 총 이자 = 월 상환액 * 총 개월 수 - 원금
+        total_interest = (monthly_payment * months) - principal
+        
+    return {
+        "monthly_payment": round(monthly_payment, 2),
+        "total_interest": round(total_interest, 2),
+    }
 
 
 # ============================================================================
 # Resources (리소스) - 업데이트
 # ============================================================================
 
-@mcp.resource("docs://hybrid/readme")
+@mcp.resource("docs://finance/readme")
 def get_readme() -> str:
     """
-    Hybrid Utility MCP 서버 사용 가이드를 제공합니다.
+    Finance Calculation MCP 서버 사용 가이드를 제공합니다.
     
     Returns:
         Markdown 형식의 문서
     """
-    return """# Hybrid Utility MCP Server Documentation
+    return """# Financial & Life Calculation MCP Server Documentation
 
 ## 개요
-텍스트 요약, 유사도 분석 및 로그 계산을 위한 다양한 유틸리티 도구를 제공합니다.
+월급 기반 연봉 계산, 단순 이자 계산, 대출 상환액 계산과 같은 실용적인 재무 분석 기능을 제공합니다.
 
 ## 사용 가능한 도구
 
-### summarize_text_file
-텍스트 파일의 내용을 지정된 길이로 요약합니다.
-**파라미터:** `file_content` (string), `summary_length` (string: "short", "medium", "long")
+### calculate_annual_salary
+월급과 지급 기간(개월)을 기반으로 연봉 및 예상 월 실수령액을 계산합니다.
+**파라미터:** `monthly_salary` (float, 세전 월급), `period_months` (int, 지급 기간, 기본값 12)
 
-### calculate_slash_similarity
-'단어1/단어2' 형태로 입력된 두 단어의 문자 기반 유사도를 계산합니다.
-**파라미터:** `slash_input` (string)
-**결과:** 0.0 ~ 1.0 사이의 유사도 점수
+### calculate_simple_interest
+초기 원금, 연 이자율, 기간(년)을 기반으로 단순 이자를 계산하여 최종 원리금을 예측합니다.
+**파라미터:** `principal` (float, 원금), `annual_rate` (float, 연 이자율), `years` (float, 기간)
 
-### calculate_logarithm
-입력된 숫자의 로그 값을 계산합니다. 
-
-[Image of logarithm formula]
-
-**파라미터:** `number` (float, 양수), `base` (Literal: 2, 10, 'e')
+### calculate_loan_repayment
+원리금 균등 상환 방식의 대출에 대한 월 상환액과 총 이자를 계산합니다.
+**파라미터:** `principal` (float, 대출 원금), `annual_rate` (float, 연 이자율), `months` (int, 총 기간)
 
 ## 사용 방법
-
-1. MCP 클라이언트에서 서버 연결
-2. 필요한 유틸리티 도구를 호출
-3. 결과 확인
+... (생략)
 """
 
 
@@ -204,43 +206,43 @@ def get_readme() -> str:
 # ============================================================================
 
 @mcp.prompt()
-def analysis_explanation_template(tool_name: str, **kwargs) -> str:
+def finance_explanation_template(tool_name: str, **kwargs) -> str:
     """
-    연산 결과를 설명하는 프롬프트 템플릿을 제공합니다.
+    재무 계산 결과를 설명하는 프롬프트 템플릿을 제공합니다.
     """
     
     try:
-        if tool_name == "summarize_text_file":
-            result = summarize_text_file(kwargs['file_content'], kwargs['summary_length'])
-            desc = f"입력된 텍스트 파일을 {kwargs['summary_length']} 길이로 요약했습니다."
-        elif tool_name == "calculate_slash_similarity":
-            result = calculate_slash_similarity(kwargs['slash_input'])
-            desc = f"'{kwargs['slash_input']}'의 슬래시로 구분된 두 단어의 유사도를 계산했습니다."
-        elif tool_name == "calculate_logarithm":
-            result = calculate_logarithm(kwargs['number'], kwargs['base'])
-            desc = f"숫자 {kwargs['number']}의 밑이 {kwargs['base']}인 로그 값을 계산했습니다."
+        if tool_name == "calculate_annual_salary":
+            result = calculate_annual_salary(kwargs['monthly_salary'], kwargs.get('period_months', 12))
+            desc = f"월급 {kwargs['monthly_salary']:,}원과 {kwargs.get('period_months', 12)}개월을 기준으로 연봉을 계산했습니다."
+        elif tool_name == "calculate_simple_interest":
+            result = calculate_simple_interest(kwargs['principal'], kwargs['annual_rate'], kwargs['years'])
+            desc = f"원금 {kwargs['principal']:,}원의 단리 이자율을 계산했습니다."
+        elif tool_name == "calculate_loan_repayment":
+            result = calculate_loan_repayment(kwargs['principal'], kwargs['annual_rate'], kwargs['months'])
+            desc = f"대출 원금 {kwargs['principal']:,}원에 대한 월 상환액을 계산했습니다."
         else:
             result = "N/A"
-            desc = f"지원되지 않는 연산"
+            desc = f"지원되지 않는 금융 연산"
             
     except Exception as e:
         result = f"오류: {e}"
         desc = f"연산 실패"
         
     
-    return f"""사용자에게 다음 연산 결과를 명확하고 적절하게 설명하세요.
+    return f"""사용자에게 다음 재무 계산 결과를 명확하고 유익하게 설명하세요.
 
 수행된 연산: {tool_name}
 설명: {desc}
 입력된 인수: {kwargs}
-최종 변환 결과: {result}
+최종 계산 결과: {result}
 
 메시지에 포함할 내용:
-1. 수행된 연산의 목적과 입력 값 명시
-2. 계산된 최종 결과
-3. (유사도나 로그의 경우) 결과 해석에 대한 간략한 설명 제공
+1. 계산의 목적 (예: 월급 예상, 투자 미래 가치, 대출 부담금) 명시
+2. 주요 입력 값과 최종 결과 (예: 월 실수령액, 총 이자) 명확히 제시
+3. 결과가 사용자에게 주는 재무적 의미 간략하게 해석
 
-톤: 정보 제공 및 전문성
+톤: 전문적이고 조언하는
 길이: 3-5 문장
 """
 
