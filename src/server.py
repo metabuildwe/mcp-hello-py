@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Simple Hello MCP Server
-
+교육생이예요
 이 모듈은 이름을 받아 한국어로 인사하는 간단한 MCP 서버를 제공합니다.
 
 주요 기능:
