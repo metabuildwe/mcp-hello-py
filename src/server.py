@@ -70,9 +70,9 @@ def say_hello(name: str) -> str:
         '안녕하세요, 김철수님!'
     """
     if not name or name.strip() == "":
-        return "안녕하세요!"
+        return "안녕하세요~~!"
     
-    return f"안녕하세요, {name}님!"
+    return f"안녕하세요, {name}님~~~!!!!"
 
 
 @mcp.tool()
