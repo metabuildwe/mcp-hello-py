@@ -1,6 +1,6 @@
-# MCP Hello Server (Python)
+# Place MCP Server Documentation
 
-간단한 Hello MCP 서버 - 이름을 입력받아 한국어로 인사합니다!
+관광지 명을 받아 현재의 밀집 정도를 출력하는 간단한 MCP 서버입니다.
 
 ## 구조
 
@@ -18,8 +18,8 @@ mcp-hello-py/
 
 ## 주요 기능
 
-- **say_hello**: "안녕하세요, {name}님!" 형식으로 인사
-- **say_hello_multiple**: 여러 사람에게 한 번에 인사
+- **say_place**: 하나의 관광지를 검색
+- **say_place_multiple**: 여러 관광지의 상태를 한번에 검색
 - **MCP 프로토콜**: Tools, Resources, Prompts 지원
 
 ## 설치
@@ -45,6 +45,7 @@ PORT=8080
 ## 실행
 
 ### Streamable HTTP 모드 (Cloud Run, Web)
+
 ```bash
 python3 src/server.py --http-stream
 
@@ -68,10 +69,10 @@ PORT=3000 python3 src/server.py --http-stream
 
 ### Headers 설정 (모든 요청에 필수)
 
-| Header | Value |
-|--------|-------|
+| Header         | Value              |
+| -------------- | ------------------ |
 | `Content-Type` | `application/json` |
-| `Accept` | `application/json` |
+| `Accept`       | `application/json` |
 
 ### 1. MCP 서버 초기화
 
@@ -103,7 +104,7 @@ PORT=3000 python3 src/server.py --http-stream
 }
 ```
 
-### 3. say_hello 호출
+### 3. say_place 호출
 
 ```json
 {
@@ -111,24 +112,30 @@ PORT=3000 python3 src/server.py --http-stream
   "id": 3,
   "method": "tools/call",
   "params": {
-    "name": "say_hello",
-    "arguments": {"name": "김철수"}
+    "name": "say_place",
+    "arguments": {"name": "경복궁"}
   }
 }
 ```
 
 **응답 예시:**
+
 ```json
 {
   "jsonrpc": "2.0",
   "id": 3,
   "result": {
-    "content": [{"type": "text", "text": "안녕하세요, 김철수님!"}]
+    "content": [
+      {
+        "type": "text",
+        "text": "경복궁의 현재 밀집 정도는 여유상태입니다.\n사람이 몰려있을 가능성이 낮고 붐빔은 거의 느껴지지 않아요. 도보 이동이 자유로워요."
+      }
+    ]
   }
 }
 ```
 
-### 4. say_hello_multiple 호출
+### 4. say_place_multiple 호출
 
 ```json
 {
@@ -136,19 +143,25 @@ PORT=3000 python3 src/server.py --http-stream
   "id": 4,
   "method": "tools/call",
   "params": {
-    "name": "say_hello_multiple",
-    "arguments": {"names": ["김철수", "이영희", "박민수"]}
+    "name": "say_place_multiple",
+    "arguments": {"names": ["서울역", "이태원", "경복궁"]}
   }
 }
 ```
 
 **응답 예시:**
+
 ```json
 {
   "jsonrpc": "2.0",
   "id": 4,
   "result": {
-    "content": [{"type": "text", "text": "• 안녕하세요, 김철수님!\n• 안녕하세요, 이영희님!\n• 안녕하세요, 박민수님!"}]
+    "content": [
+      {
+        "type": "text",
+        "text": "• 서울역의 현재 밀집 정도는 여유상태입니다.\n사람이 몰려있을 가능성이 낮고 붐빔은 거의 느껴지지 않아요. 도보 이동이 자유로워요.\n• 이태원의 현재 밀집 정도는 여유상태입니다.\n사람이 몰려있을 가능성이 낮고 붐빔은 거의 느껴지지 않아요. 도보 이동이 자유로워요.\n• 경복궁의 현재 밀집 정도는 여유상태입니다.\n사람이 몰려있을 가능성이 낮고 붐빔은 거의 느껴지지 않아요. 도보 이동이 자유로워요."
+      }
+    ]
   }
 }
 ```
@@ -163,27 +176,27 @@ Postman에서 URL만 변경하여 동일하게 테스트 가능합니다.
 
 ### 환경 변수 설정 (Cloud Run)
 
-| 변수 | 값 | 설명 |
-|------|-----|------|
+| 변수   | 값     | 설명                              |
+| ------ | ------ | --------------------------------- |
 | `PORT` | `8080` | Cloud Run 기본 포트 (자동 설정됨) |
 
 ## MCP Tools
 
-### say_hello
+### say_place
 
-한 사람에게 인사합니다.
+하나의 관광지를 검색합니다.
 
-| 파라미터 | 타입 | 필수 | 설명 |
-|---------|------|------|------|
-| `name` | string | O | 인사할 사람의 이름 |
+| 파라미터 | 타입   | 필수 | 설명            |
+| -------- | ------ | ---- | --------------- |
+| `name`   | string | O    | 검색할 관광지명 |
 
-### say_hello_multiple
+### say_place_multiple
 
-여러 사람에게 한 번에 인사합니다.
+여러 관광지의 상태를 한번에 검색합니다.
 
-| 파라미터 | 타입 | 필수 | 설명 |
-|---------|------|------|------|
-| `names` | array | O | 이름 리스트 |
+| 파라미터 | 타입  | 필수 | 설명            |
+| -------- | ----- | ---- | --------------- |
+| `names`  | array | O    | 관광지명 리스트 |
 
 ## 기술 스택
 
@@ -195,10 +208,10 @@ Postman에서 URL만 변경하여 동일하게 테스트 가능합니다.
 
 ## 전송 모드
 
-| 모드 | 사용처 | 엔드포인트 |
-|------|--------|-----------|
-| stdio | Claude Desktop, MCP Inspector | stdin/stdout |
-| Streamable HTTP | Cloud Run, Web | `POST /mcp` |
+| 모드            | 사용처                        | 엔드포인트   |
+| --------------- | ----------------------------- | ------------ |
+| stdio           | Claude Desktop, MCP Inspector | stdin/stdout |
+| Streamable HTTP | Cloud Run, Web                | `POST /mcp`  |
 
 ## 참고
 

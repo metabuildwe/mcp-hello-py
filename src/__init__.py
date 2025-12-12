@@ -5,4 +5,4 @@ MCP Hello Server - 패키지 초기화 모듈
 """
 
 __version__ = "1.0.0"
-__author__ = "Metabuild Edu"
+__author__ = "Metabuild Edu HJK"

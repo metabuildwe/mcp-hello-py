@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Simple Hello MCP Server
+Simple Place MCP Server
 
-이 모듈은 이름을 받아 한국어로 인사하는 간단한 MCP 서버를 제공합니다.
+관광지 명을 받아 현재의 밀집 정도를 출력하는 MCP 서버를 제공합니다.
 
 주요 기능:
-    - 단일 인사: 한 사람에게 "안녕하세요, {name}님!" 형태로 인사
-    - 복수 인사: 여러 사람에게 한 번에 인사
+    - 단일 검색: 하나의 관광지 상태를 검색
+    - 복수 검색: 여러 관광지들의 상태를 검색
     - MCP 프로토콜: Tools, Resources, Prompts 지원
     - Streamable HTTP 전송: Cloud Run 등 서버리스 환경 지원
 
@@ -19,8 +19,8 @@ Simple Hello MCP Server
         $ python src/server.py
     
     도구 호출:
-        {"name": "say_hello", "arguments": {"name": "김철수"}}
-        -> "안녕하세요, 김철수님!"
+        {"name": "say_place", "arguments": {"name": "경복궁"}}
+        -> "경복궁의 현재 밀집 정도는 여유상태입니다.\n사람이 몰려있을 가능성이 낮고 붐빔은 거의 느껴지지 않아요. 도보 이동이 자유로워요."
 
 작성자: MCP Hello Team
 버전: 1.0.0
@@ -29,16 +29,22 @@ Simple Hello MCP Server
 
 import os
 
+from urllib.parse import quote
+from urllib.request import urlopen
+import json
+
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+
+BASE_URL = "http://openapi.seoul.go.kr:8088/6c5571714773616936314e6c747547/json/citydata_ppltn/1/5/"
 
 # ============================================================================
 # FastMCP 서버 생성
 # ============================================================================
 
 mcp = FastMCP(
-    name="mcp-hello",
-    instructions="이름을 받아 한국어로 인사하는 간단한 MCP 서버입니다.",
+    name="mcp-place",
+    instructions="서울시내 주요 관광지 밀집 정도를 출력하는 MCP입니다.",
     stateless_http=True,
     json_response=True,
     host="0.0.0.0",
@@ -53,44 +59,56 @@ mcp = FastMCP(
 # ============================================================================
 
 @mcp.tool()
-def say_hello(name: str) -> str:
+def say_place(name: str) -> str:
     """
-    이름을 받아 한국어로 인사합니다.
+    관광지 명을 받아 현재의 밀집 정도를 출력합니다.
     
-    간단한 형식의 인사말을 반환하며, 이름이 비어있을 경우 기본 메시지를 반환합니다.
+    공란이 전달되는 경우 경복궁 정보를 출력합니다.
     
     Args:
-        name: 인사할 대상의 이름 (예: "김철수", "이영희", "박민수")
+        name: 검색할 주요 관광지명(예: 덕수궁, 경복궁, ...)
     
     Returns:
-        "안녕하세요, {name}님!" 형태의 인사말 문자열
+        "{name}의 현재 밀집 정도는 {status}상태입니다.\n{msg}" 형태의 문자열
     
     Examples:
-        >>> say_hello("김철수")
-        '안녕하세요, 김철수님!'
+        >>> say_place("경복궁")
+        '경복궁의 현재 밀집 정도는 여유상태입니다.\n사람이 몰려있을 가능성이 낮고 붐빔은 거의 느껴지지 않아요. 도보 이동이 자유로워요.'
     """
     if not name or name.strip() == "":
-        return "안녕하세요!"
-    
-    return f"안녕하세요, {name}님!"
+        name = "경복궁"
+
+    with urlopen(BASE_URL + quote(name)) as response:
+        json_bytes = response.read()
+
+    json_data = json.loads(json_bytes.decode("utf-8"))
+
+    row = json_data["SeoulRtd.citydata_ppltn"][0]
+
+    area_congest_lvl = row.get("AREA_CONGEST_LVL", "")
+    area_congest_msg = row.get("AREA_CONGEST_MSG", "")
+
+    return (
+        f"{name}의 현재 밀집 정도는 {area_congest_lvl} 상태입니다.\n{area_congest_msg}"
+    )
 
 
 @mcp.tool()
-def say_hello_multiple(names: list[str]) -> str:
+def say_place_multiple(names: list[str]) -> str:
     """
-    여러 사람에게 한 번에 인사합니다.
+    여러 장소를 한번에 검색합니다.
     
-    이름 리스트를 받아 각 이름마다 인사말을 생성하고,
+    장소명 리스트를 받아 각 장소마다 상태를 생성하고,
     불릿 포인트(•)로 구분하여 하나의 문자열로 반환합니다.
     
     Args:
-        names: 인사할 대상의 이름 리스트 (예: ["김철수", "이영희", "박민수"])
+        names: 검색할 장소명의 리스트 (예: ["서울역", "이태원", "경복궁"])
     
     Returns:
-        각 인사말이 줄바꿈으로 구분된 문자열
+        각 장소별 성태가 줄바꿈으로 출력된 목록
     
     Examples:
-        >>> say_hello_multiple(["김철수", "이영희"])
+        >>> say_place_multiple(["김철수", "이영희"])
         '• 안녕하세요, 김철수님!\\n• 안녕하세요, 이영희님!'
     """
     if not names:
@@ -98,7 +116,7 @@ def say_hello_multiple(names: list[str]) -> str:
     
     greetings = []
     for name in names:
-        greeting = say_hello(name)
+        greeting = say_place(name)
         greetings.append(f"• {greeting}")
     
     return "\n".join(greetings)
@@ -111,61 +129,62 @@ def say_hello_multiple(names: list[str]) -> str:
 @mcp.resource("docs://hello/readme")
 def get_readme() -> str:
     """
-    Hello MCP 서버 사용 가이드를 제공합니다.
+    Place MCP 서버 사용 가이드를 제공합니다.
     
     Returns:
         Markdown 형식의 문서
     """
-    return """# Hello MCP Server Documentation
+    return """# Place MCP Server Documentation
 
 ## 개요
-이름을 받아 한국어로 인사하는 간단한 MCP 서버입니다.
+관광지 명을 받아 현재의 밀집 정도를 출력하는 간단한 MCP 서버입니다.
 
 ## 사용 가능한 도구
 
-### say_hello
-한 사람에게 인사합니다.
+### say_place
+하나의 관광지를 검색합니다.
 
 **파라미터:**
-- `name` (string, 필수): 인사할 사람의 이름
+- `name` (string, 필수): 검색할 관광지명
 
 **예시:**
 ```json
 {
-  "name": "김철수"
+  "name": "경복궁"
 }
 ```
 
 **결과:**
 ```
-안녕하세요, 김철수님!
+경복궁의 현재 밀집 정도는 여유상태입니다.\n사람이 몰려있을 가능성이 낮고 붐빔은 거의 느껴지지 않아요. 도보 이동이 자유로워요.
 ```
 
-### say_hello_multiple
-여러 사람에게 한 번에 인사합니다.
+### say_place_multiple
+여러 관광지의 상태를 한번에 검색합니다.
 
 **파라미터:**
-- `names` (array, 필수): 인사할 사람들의 이름 리스트
+- `names` (array, 필수): 검색할 관광지명 목록
 
 **예시:**
 ```json
 {
-  "names": ["김철수", "이영희", "박민수"]
+  "names": ["서울역", "이태원", "경복궁"]
 }
 ```
 
 **결과:**
 ```
-• 안녕하세요, 김철수님!
-• 안녕하세요, 이영희님!
-• 안녕하세요, 박민수님!
+• 서울역의 현재 밀집 정도는 여유상태입니다.\n사람이 몰려있을 가능성이 낮고 붐빔은 거의 느껴지지 않아요. 도보 이동이 자유로워요.
+• 이태원의 현재 밀집 정도는 여유상태입니다.\n사람이 몰려있을 가능성이 낮고 붐빔은 거의 느껴지지 않아요. 도보 이동이 자유로워요.
+• 경복궁의 현재 밀집 정도는 여유상태입니다.\n사람이 몰려있을 가능성이 낮고 붐빔은 거의 느껴지지 않아요. 도보 이동이 자유로워요.
 ```
 
 ## 사용 방법
 
 1. MCP 클라이언트에서 서버 연결
-2. `say_hello` 또는 `say_hello_multiple` 도구 호출
-3. 인사말 결과 확인
+2. `say_place` 또는 `say_place_multiple` 도구 호출
+3. OpenAPI 연결후 결과 출력
+4. 상태 출력 결과 확인
 
 ## 기술 스택
 - Python 3.11+
@@ -182,29 +201,16 @@ def get_readme() -> str:
 @mcp.prompt()
 def greeting_message(recipient: str) -> str:
     """
-    인사 메시지 작성 템플릿을 제공합니다.
+    추가 검색에 대한 템플릿을 제공합니다.
     
     Args:
-        recipient: 인사할 대상의 이름
+        recipient: 기존 검색한 장소
     
     Returns:
         AI 어시스턴트를 위한 프롬프트 템플릿
     """
-    greeting = say_hello(recipient)
     
-    return f"""{recipient}님에게 보낼 인사 메시지를 작성하세요.
-
-다음 형식으로 시작하세요:
-{greeting}
-
-메시지에 포함할 내용:
-1. 따뜻한 인사
-2. 간단한 소개 또는 목적
-3. 정중한 마무리
-
-톤: 친근하고 공손하게
-길이: 3-5 문장
-"""
+    return f"{recipient}이외의 장소에 대하여 알고싶으신가요?"
 
 
 # ============================================================================
